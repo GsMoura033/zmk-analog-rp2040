@@ -7,13 +7,36 @@
  *   Module VRx -> GPIO26 (ADC0)  — Pro Micro label A0 / D18
  *   Module VRy -> GPIO27 (ADC1)  — Pro Micro label A1 / D19
  *   Module SW  -> GPIO2  (click) — Pro Micro label D2
+ *
+ * Note: badjeff/zmk-analog-input-driver hardcodes adc_raw_to_millivolts(..., ADC_GAIN_1_6)
+ * even when the channel is set up as GAIN_1 (required on RP2040). Reported mV is therefore
+ * ~6× the real voltage. Mid/deadzone/min-max below are scaled for that (real 1.65 V → 9900).
  */
 
 #include <dt-bindings/zmk/matrix_transform.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
+#include <zephyr/dt-bindings/adc/adc.h>
 
 &adc {
 	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel@0 {
+		reg = <0>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
+
+	channel@1 {
+		reg = <1>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
 };
 
 / {
@@ -37,7 +60,7 @@
 
 	/*
 	 * Analog axes -> relative mouse motion.
-	 * Mid-point ~1.65 V when the pot is powered from 3.3 V.
+	 * mv-* values are 6× real millivolts (see file header).
 	 * Tune mv-deadzone / scale-* if the stick feels drifty or too fast/slow.
 	 */
 	anin0: analog_input_0 {
@@ -46,9 +69,9 @@
 
 		x-ch {
 			io-channels = <&adc 0>; /* GPIO26 */
-			mv-mid = <1650>;
-			mv-min-max = <1600>;
-			mv-deadzone = <80>;
+			mv-mid = <9900>;
+			mv-min-max = <9600>;
+			mv-deadzone = <480>;
 			scale-multiplier = <1>;
 			scale-divisor = <40>;
 			evt-type = <INPUT_EV_REL>;
@@ -57,9 +80,9 @@
 
 		y-ch {
 			io-channels = <&adc 1>; /* GPIO27 */
-			mv-mid = <1650>;
-			mv-min-max = <1600>;
-			mv-deadzone = <80>;
+			mv-mid = <9900>;
+			mv-min-max = <9600>;
+			mv-deadzone = <480>;
 			scale-multiplier = <1>;
 			scale-divisor = <40>;
 			invert;

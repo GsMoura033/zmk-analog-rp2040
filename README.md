@@ -56,7 +56,9 @@ Edita `boards/shields/psp_stick/psp_stick.overlay`:
 | `scale-divisor` | Mais alto = cursor mais lento |
 | `scale-multiplier` | Mais alto = cursor mais rápido |
 | `invert` no eixo | Inverte X ou Y |
-| `mv-mid` | Centro esperado em mV (~1650 com 3,3 V) |
+| `mv-mid` | Centro reportado (~9900 = 1,65 V real; ver nota abaixo) |
+
+**Nota:** o driver converte mV com `ADC_GAIN_1_6` (pensado para nRF), mas no RP2040 o canal usa `ADC_GAIN_1`. Os valores `mv-*` no overlay estão **×6** face à tensão real (1,65 V → `9900`). Ao afinares, multiplica mV reais por 6.
 
 Depois de editar: commit + push → novo build.
 
