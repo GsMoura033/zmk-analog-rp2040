@@ -1,0 +1,23 @@
+/*
+ * Copyright (c) 2026 GsMoura033
+ * SPDX-License-Identifier: MIT
+ *
+ * Single switch on the stick = left click. Cursor motion comes from the ADC
+ * input listener in psp_stick.overlay (not from the keymap).
+ */
+
+#include <behaviors.dtsi>
+#include <dt-bindings/zmk/keys.h>
+#include <dt-bindings/zmk/mouse.h>
+
+/ {
+	keymap {
+		compatible = "zmk,keymap";
+
+		default_layer {
+			bindings = <
+				&mkp LCLK
+			>;
+		};
+	};
+};

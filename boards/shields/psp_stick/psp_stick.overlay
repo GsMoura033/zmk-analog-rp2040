@@ -1,0 +1,75 @@
+/*
+ * PSP 2-axis analog stick as a USB mouse pointer on RP2040.
+ *
+ * Default wiring (3.3V ONLY — do not feed the pot with 5V into the ADC):
+ *   Module VCC -> board 3V3
+ *   Module GND -> GND
+ *   Module VRx -> GPIO26 (ADC0)  — Pro Micro label A0 / D18
+ *   Module VRy -> GPIO27 (ADC1)  — Pro Micro label A1 / D19
+ *   Module SW  -> GPIO2  (click) — Pro Micro label D2
+ */
+
+#include <dt-bindings/zmk/matrix_transform.h>
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+
+&adc {
+	status = "okay";
+};
+
+/ {
+	chosen {
+		zmk,kscan = &kscan0;
+		zmk,matrix_transform = &default_transform;
+	};
+
+	default_transform: keymap_transform_0 {
+		compatible = "zmk,matrix-transform";
+		columns = <1>;
+		rows = <1>;
+		map = <RC(0, 0)>;
+	};
+
+	/* Stick push-switch = left mouse button */
+	kscan0: kscan_0 {
+		compatible = "zmk,kscan-gpio-direct";
+		input-gpios = <&gpio0 2 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+	};
+
+	/*
+	 * Analog axes -> relative mouse motion.
+	 * Mid-point ~1.65 V when the pot is powered from 3.3 V.
+	 * Tune mv-deadzone / scale-* if the stick feels drifty or too fast/slow.
+	 */
+	anin0: analog_input_0 {
+		compatible = "zmk,analog-input";
+		sampling-hz = <100>;
+
+		x-ch {
+			io-channels = <&adc 0>; /* GPIO26 */
+			mv-mid = <1650>;
+			mv-min-max = <1600>;
+			mv-deadzone = <80>;
+			scale-multiplier = <1>;
+			scale-divisor = <40>;
+			evt-type = <INPUT_EV_REL>;
+			input-code = <INPUT_REL_X>;
+		};
+
+		y-ch {
+			io-channels = <&adc 1>; /* GPIO27 */
+			mv-mid = <1650>;
+			mv-min-max = <1600>;
+			mv-deadzone = <80>;
+			scale-multiplier = <1>;
+			scale-divisor = <40>;
+			invert;
+			evt-type = <INPUT_EV_REL>;
+			input-code = <INPUT_REL_Y>;
+		};
+	};
+
+	stick_listener {
+		compatible = "zmk,input-listener";
+		device = <&anin0>;
+	};
+};

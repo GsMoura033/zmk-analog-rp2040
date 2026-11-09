@@ -1,0 +1,9 @@
+# GitHub Actions build matrix for this ZMK user config.
+---
+include:
+  - board: sparkfun_pro_micro_rp2040
+    shield: psp_stick
+    artifact-name: psp_stick_promicro
+  - board: rpi_pico
+    shield: psp_stick
+    artifact-name: psp_stick_pico

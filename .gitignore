@@ -1,0 +1,10 @@
+build/
+.zmk-build/
+.west/
+modules/
+*.uf2
+*.hex
+*.elf
+*.map
+*.bin
+*.log

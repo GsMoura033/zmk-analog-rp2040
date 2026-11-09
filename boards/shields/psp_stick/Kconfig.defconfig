@@ -1,0 +1,9 @@
+if SHIELD_PSP_STICK
+
+config ZMK_KEYBOARD_NAME
+	default "PSP Stick"
+
+config ZMK_POINTING
+	default y
+
+endif

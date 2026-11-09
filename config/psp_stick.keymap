@@ -1,0 +1,22 @@
+/*
+ * Copyright (c) 2026 GsMoura033
+ * SPDX-License-Identifier: MIT
+ *
+ * Stick switch = left click. Cursor motion comes from ADC (overlay).
+ */
+
+#include <behaviors.dtsi>
+#include <dt-bindings/zmk/keys.h>
+#include <dt-bindings/zmk/mouse.h>
+
+/ {
+	keymap {
+		compatible = "zmk,keymap";
+
+		default_layer {
+			bindings = <
+				&mkp LCLK
+			>;
+		};
+	};
+};

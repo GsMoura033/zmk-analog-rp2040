@@ -1,0 +1,8 @@
+file_format: "1"
+id: psp_stick
+name: PSP Analog Stick
+type: shield
+url: https://github.com/GsMoura033/zmk-analog-rp2040
+features:
+  - keys
+  - pointing
