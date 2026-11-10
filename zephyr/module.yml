@@ -1,4 +1,7 @@
 name: zmk_analog_rp2040
 build:
+  cmake: .
+  kconfig: Kconfig
   settings:
     board_root: .
+    dts_root: modules/zmk-analog-input-driver

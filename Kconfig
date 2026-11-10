@@ -1,0 +1,1 @@
+rsource "modules/zmk-analog-input-driver/Kconfig"

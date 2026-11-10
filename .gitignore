@@ -1,7 +1,14 @@
 build/
 .zmk-build/
 .west/
-modules/
+# West checkout dirs (not our vendored driver under modules/zmk-analog-input-driver)
+/modules/hal/
+/modules/lib/
+/modules/tee/
+/modules/crypto/
+/modules/debug/
+/modules/fs/
+/modules/zmk/
 *.uf2
 *.hex
 *.elf
