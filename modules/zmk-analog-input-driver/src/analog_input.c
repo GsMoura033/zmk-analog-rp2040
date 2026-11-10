@@ -18,11 +18,125 @@ LOG_MODULE_REGISTER(ANALOG_INPUT, CONFIG_ANALOG_INPUT_LOG_LEVEL);
 
 #include <zmk/drivers/analog_input.h>
 
+#if IS_ENABLED(CONFIG_SETTINGS)
+#include <zephyr/settings/settings.h>
+#endif
+
 #if IS_ENABLED(CONFIG_SHELL)
 #include <zephyr/shell/shell.h>
 #endif
 
 static const struct device *stick_dev;
+
+#if IS_ENABLED(CONFIG_SETTINGS)
+struct stick_calib_store {
+	uint16_t mid_x;
+	uint16_t mid_y;
+	uint16_t divisor;
+	uint8_t deadzone;
+	uint8_t invert_y;
+	uint8_t valid;
+};
+
+static struct stick_calib_store stick_store;
+
+static int stick_settings_set(const char *name, size_t len, settings_read_cb read_cb, void *cb_arg) {
+	const char *next;
+	ssize_t rc;
+
+	if (settings_name_steq(name, "mid_x", &next) && !next) {
+		if (len != sizeof(stick_store.mid_x)) {
+			return -EINVAL;
+		}
+		rc = read_cb(cb_arg, &stick_store.mid_x, len);
+		return rc >= 0 ? 0 : rc;
+	}
+	if (settings_name_steq(name, "mid_y", &next) && !next) {
+		if (len != sizeof(stick_store.mid_y)) {
+			return -EINVAL;
+		}
+		rc = read_cb(cb_arg, &stick_store.mid_y, len);
+		return rc >= 0 ? 0 : rc;
+	}
+	if (settings_name_steq(name, "divisor", &next) && !next) {
+		if (len != sizeof(stick_store.divisor)) {
+			return -EINVAL;
+		}
+		rc = read_cb(cb_arg, &stick_store.divisor, len);
+		return rc >= 0 ? 0 : rc;
+	}
+	if (settings_name_steq(name, "deadzone", &next) && !next) {
+		if (len != sizeof(stick_store.deadzone)) {
+			return -EINVAL;
+		}
+		rc = read_cb(cb_arg, &stick_store.deadzone, len);
+		return rc >= 0 ? 0 : rc;
+	}
+	if (settings_name_steq(name, "invert_y", &next) && !next) {
+		if (len != sizeof(stick_store.invert_y)) {
+			return -EINVAL;
+		}
+		rc = read_cb(cb_arg, &stick_store.invert_y, len);
+		return rc >= 0 ? 0 : rc;
+	}
+	if (settings_name_steq(name, "valid", &next) && !next) {
+		if (len != sizeof(stick_store.valid)) {
+			return -EINVAL;
+		}
+		rc = read_cb(cb_arg, &stick_store.valid, len);
+		return rc >= 0 ? 0 : rc;
+	}
+	return -ENOENT;
+}
+
+SETTINGS_STATIC_HANDLER_DEFINE(psp_stick, "psp_stick", NULL, stick_settings_set, NULL, NULL);
+
+static void stick_apply_store(struct analog_input_data *data) {
+	if (!stick_store.valid || data->rt_ch_len < 2) {
+		return;
+	}
+	data->rt_ch[0].mv_mid = stick_store.mid_x;
+	data->rt_ch[1].mv_mid = stick_store.mid_y;
+	data->rt_ch[0].mv_deadzone = stick_store.deadzone;
+	data->rt_ch[1].mv_deadzone = stick_store.deadzone;
+	data->rt_ch[0].scale_divisor = stick_store.divisor ? stick_store.divisor : 1;
+	data->rt_ch[1].scale_divisor = stick_store.divisor ? stick_store.divisor : 1;
+	data->rt_ch[1].invert = stick_store.invert_y != 0;
+}
+
+static int stick_save_store(struct analog_input_data *data) {
+	int err;
+
+	stick_store.mid_x = data->rt_ch[0].mv_mid;
+	stick_store.mid_y = data->rt_ch[1].mv_mid;
+	stick_store.deadzone = data->rt_ch[0].mv_deadzone;
+	stick_store.divisor = data->rt_ch[0].scale_divisor;
+	stick_store.invert_y = data->rt_ch[1].invert ? 1 : 0;
+	stick_store.valid = 1;
+
+	err = settings_save_one("psp_stick/mid_x", &stick_store.mid_x, sizeof(stick_store.mid_x));
+	if (err) {
+		return err;
+	}
+	err = settings_save_one("psp_stick/mid_y", &stick_store.mid_y, sizeof(stick_store.mid_y));
+	if (err) {
+		return err;
+	}
+	err = settings_save_one("psp_stick/deadzone", &stick_store.deadzone, sizeof(stick_store.deadzone));
+	if (err) {
+		return err;
+	}
+	err = settings_save_one("psp_stick/divisor", &stick_store.divisor, sizeof(stick_store.divisor));
+	if (err) {
+		return err;
+	}
+	err = settings_save_one("psp_stick/invert_y", &stick_store.invert_y, sizeof(stick_store.invert_y));
+	if (err) {
+		return err;
+	}
+	return settings_save_one("psp_stick/valid", &stick_store.valid, sizeof(stick_store.valid));
+}
+#endif /* CONFIG_SETTINGS */
 
 static int analog_input_report_data(const struct device *dev) {
     struct analog_input_data *data = dev->data;
@@ -255,6 +369,11 @@ static void analog_input_async_init(struct k_work *work) {
     for (uint8_t i = 0; i < data->rt_ch_len; i++) {
         data->rt_ch[i] = config->io_channels[i];
     }
+
+#if IS_ENABLED(CONFIG_SETTINGS)
+    settings_load_subtree("psp_stick");
+    stick_apply_store(data);
+#endif
 
     for (uint8_t i = 0; i < data->rt_ch_len; i++) {
         struct analog_input_io_channel ch_cfg = data->rt_ch[i];
@@ -563,12 +682,39 @@ static int cmd_stick_invert_y(const struct shell *shell, size_t argc, char **arg
 	return 0;
 }
 
+static int cmd_stick_save(const struct shell *shell, size_t argc, char **argv) {
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+	if (!stick_dev) {
+		shell_error(shell, "STICK ERR no device");
+		return -ENODEV;
+	}
+	struct analog_input_data *data = stick_dev->data;
+	if (!data->ready || data->rt_ch_len < 2) {
+		shell_error(shell, "STICK ERR not ready");
+		return -EBUSY;
+	}
+#if IS_ENABLED(CONFIG_SETTINGS)
+	int err = stick_save_store(data);
+	if (err) {
+		shell_error(shell, "STICK ERR save failed %d", err);
+		return err;
+	}
+	shell_print(shell, "STICK OK saved");
+	return 0;
+#else
+	shell_error(shell, "STICK ERR settings disabled");
+	return -ENOTSUP;
+#endif
+}
+
 SHELL_STATIC_SUBCMD_SET_CREATE(stick_cmds,
 	SHELL_CMD(get, NULL, "Show calibration", cmd_stick_get),
 	SHELL_CMD_ARG(mid, NULL, "Set mid_x mid_y", cmd_stick_mid, 3, 0),
 	SHELL_CMD_ARG(deadzone, NULL, "Set deadzone", cmd_stick_deadzone, 2, 0),
 	SHELL_CMD_ARG(divisor, NULL, "Set speed divisor (higher=slower)", cmd_stick_divisor, 2, 0),
 	SHELL_CMD_ARG(invert_y, NULL, "Invert Y axis 0/1", cmd_stick_invert_y, 2, 0),
+	SHELL_CMD(save, NULL, "Save calibration to flash", cmd_stick_save),
 	SHELL_SUBCMD_SET_END);
 
 SHELL_CMD_REGISTER(stick, &stick_cmds, "PSP stick calibration", NULL);
