@@ -1,16 +1,11 @@
 /*
  * PSP 2-axis analog stick as a USB mouse pointer on RP2040.
  *
- * Default wiring (3.3V ONLY — do not feed the pot with 5V into the ADC):
+ * Wiring (3.3V ONLY — do not feed the pot with 5V into the ADC):
  *   Module VCC -> board 3V3
  *   Module GND -> GND
- *   Module VRx -> GPIO26 (ADC0)  — Pro Micro label A0 / D18
- *   Module VRy -> GPIO27 (ADC1)  — Pro Micro label A1 / D19
- *   Module SW  -> GPIO2  (click) — Pro Micro label D2
- *
- * Note: badjeff/zmk-analog-input-driver hardcodes adc_raw_to_millivolts(..., ADC_GAIN_1_6)
- * even when the channel is set up as GAIN_1 (required on RP2040). Reported mV is therefore
- * ~6× the real voltage. Mid/deadzone/min-max below are scaled for that (real 1.65 V → 9900).
+ *   Module VRx -> GPIO26 (ADC0)  — Pro Micro label A0 / D18 / Pico GP26
+ *   Module VRy -> GPIO27 (ADC1)  — Pro Micro label A1 / D19 / Pico GP27
  */
 
 #include <dt-bindings/zmk/matrix_transform.h>
@@ -52,16 +47,16 @@
 		map = <RC(0, 0)>;
 	};
 
-	/* Stick push-switch = left mouse button */
+	/* Optional click pad on GPIO2 (pull-up; unused if no switch) */
 	kscan0: kscan_0 {
 		compatible = "zmk,kscan-gpio-direct";
 		input-gpios = <&gpio0 2 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
 	};
 
 	/*
-	 * Analog axes -> relative mouse motion.
-	 * mv-* values are 6× real millivolts (see file header).
-	 * Tune mv-deadzone / scale-* if the stick feels drifty or too fast/slow.
+	 * mv-mid ~1.65 V on 3.3 V rail (GAIN_1). Previous 9900 mid assumed a
+	 * 6× nRF conversion and shoved the cursor to bottom-left when the stick
+	 * reported real millivolts / low raw values.
 	 */
 	anin0: analog_input_0 {
 		compatible = "zmk,analog-input";
@@ -69,22 +64,22 @@
 
 		x-ch {
 			io-channels = <&adc 0>; /* GPIO26 */
-			mv-mid = <9900>;
-			mv-min-max = <9600>;
-			mv-deadzone = <480>;
+			mv-mid = <1650>;
+			mv-min-max = <1600>;
+			mv-deadzone = <120>;
 			scale-multiplier = <1>;
-			scale-divisor = <40>;
+			scale-divisor = <60>;
 			evt-type = <INPUT_EV_REL>;
 			input-code = <INPUT_REL_X>;
 		};
 
 		y-ch {
 			io-channels = <&adc 1>; /* GPIO27 */
-			mv-mid = <9900>;
-			mv-min-max = <9600>;
-			mv-deadzone = <480>;
+			mv-mid = <1650>;
+			mv-min-max = <1600>;
+			mv-deadzone = <120>;
 			scale-multiplier = <1>;
-			scale-divisor = <40>;
+			scale-divisor = <60>;
 			invert;
 			evt-type = <INPUT_EV_REL>;
 			input-code = <INPUT_REL_Y>;

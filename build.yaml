@@ -3,7 +3,9 @@
 include:
   - board: sparkfun_pro_micro_rp2040
     shield: psp_stick
+    snippet: zmk-usb-logging
     artifact-name: psp_stick_promicro
   - board: rpi_pico
     shield: psp_stick
+    snippet: zmk-usb-logging
     artifact-name: psp_stick_pico

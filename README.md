@@ -56,9 +56,16 @@ Edita `boards/shields/psp_stick/psp_stick.overlay`:
 | `scale-divisor` | Mais alto = cursor mais lento |
 | `scale-multiplier` | Mais alto = cursor mais rápido |
 | `invert` no eixo | Inverte X ou Y |
-| `mv-mid` | Centro reportado (~9900 = 1,65 V real; ver nota abaixo) |
+| `mv-mid` | Centro em mV (~1650 com rail 3,3 V) |
 
-**Nota:** o driver converte mV com `ADC_GAIN_1_6` (pensado para nRF), mas no RP2040 o canal usa `ADC_GAIN_1`. Os valores `mv-*` no overlay estão **×6** face à tensão real (1,65 V → `9900`). Ao afinares, multiplica mV reais por 6.
+### Console USB (debug do ADC)
+
+Os builds CI usam o snippet `zmk-usb-logging`. Depois de flashar:
+
+1. Liga o stick **já com o joystick ligado** (VCC→3V3).
+2. No Windows, em *Gerenciador de Dispositivos → Portas (COM e LPT)*, anota o novo **COMx** do PSP Stick.
+3. Abre esse COM no **PuTTY** (Serial, 115200) ou Monitor Serial.
+4. Procura linhas `AIN… raw: … mv: …` — isso é o valor real para afinar `mv-mid`.
 
 Depois de editar: commit + push → novo build.
 
