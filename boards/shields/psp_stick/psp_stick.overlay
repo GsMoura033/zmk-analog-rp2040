@@ -64,10 +64,12 @@
 		x-ch {
 			io-channels = <&adc 0>; /* GPIO26 */
 			mv-mid = <8880>;
-			mv-min-max = <8000>;
+			/* Cap full-tilt contribution; lower = slower max speed */
+			mv-min-max = <3500>;
 			mv-deadzone = <200>;
 			scale-multiplier = <1>;
-			scale-divisor = <180>;
+			/* Higher divisor = slower (full tilt ≈ 3500/500 ≈ 7 counts/sample) */
+			scale-divisor = <500>;
 			evt-type = <INPUT_EV_REL>;
 			input-code = <INPUT_REL_X>;
 		};
@@ -75,10 +77,10 @@
 		y-ch {
 			io-channels = <&adc 1>; /* GPIO27 */
 			mv-mid = <9400>;
-			mv-min-max = <8000>;
+			mv-min-max = <3500>;
 			mv-deadzone = <200>;
 			scale-multiplier = <1>;
-			scale-divisor = <180>;
+			scale-divisor = <500>;
 			evt-type = <INPUT_EV_REL>;
 			input-code = <INPUT_REL_Y>;
 		};
