@@ -56,7 +56,7 @@ Edita `boards/shields/psp_stick/psp_stick.overlay`:
 | `scale-divisor` | Mais alto = cursor mais lento |
 | `scale-multiplier` | Mais alto = cursor mais rápido |
 | `invert` no eixo | Inverte X ou Y |
-| `mv-mid` | Centro em mV (~1650 com rail 3,3 V) |
+| `mv-mid` | Centro em mV reportados (este stick: X≈8880, Y≈9400 via console) |
 
 ### Console USB (debug do ADC)
 
