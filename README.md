@@ -54,7 +54,7 @@ Use o **[PSP Stick Tuner](https://github.com/GsMoura033/psp-stick-tuner)** ([dow
 2. USB → **Detectar** no tuner (escolhe a COM que responde)
 3. Centro / zona morta / velocidade / **inverter X e Y** → **Salvar**
 
-A calibração fica no PC e é reaplicada ao conectar (a gravação NVS na flash do RP2040 pode travar).
+**Salvar** no tuner grava a calibração na **flash da placa** (blob em `storage_partition`, sem NVS). Depois o stick funciona em qualquer PC — inclusive Windows XP como mouse USB. O app de calibração em si precisa de Windows 10/11.
 
 Protocolo shell (115200): `stick get|live|mid|deadzone|divisor|invert_x|invert_y|save`
 

@@ -10,6 +10,7 @@
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/input/input.h>
 #include <stdlib.h> //for abs()
+#include <stddef.h>
 #include <zephyr/sys/util.h> // for CLAMP
 #include <string.h>
 
@@ -18,9 +19,7 @@ LOG_MODULE_REGISTER(ANALOG_INPUT, CONFIG_ANALOG_INPUT_LOG_LEVEL);
 
 #include <zmk/drivers/analog_input.h>
 
-#if IS_ENABLED(CONFIG_SETTINGS)
-#include <zephyr/settings/settings.h>
-#endif
+#include <zephyr/storage/flash_map.h>
 
 #if IS_ENABLED(CONFIG_SHELL)
 #include <zephyr/shell/shell.h>
@@ -28,62 +27,105 @@ LOG_MODULE_REGISTER(ANALOG_INPUT, CONFIG_ANALOG_INPUT_LOG_LEVEL);
 
 static const struct device *stick_dev;
 
-#if IS_ENABLED(CONFIG_SETTINGS)
-/* Single blob — fewer flash writes (RP2040 NVS is sensitive). */
-struct stick_calib_store {
+/*
+ * Persist calibration as a raw blob in storage_partition.
+ * Avoid Zephyr SETTINGS_NVS on RP2040 — settings_save_one can hang (XIP).
+ * All payload lives on the stack (RAM) before flash_area_write.
+ */
+#if FIXED_PARTITION_EXISTS(storage_partition)
+#define STICK_CALIB_MAGIC 0x314B5453u /* 'STK1' */
+#define STICK_CALIB_ERASE 4096
+
+struct stick_calib_blob {
+	uint32_t magic;
 	uint16_t mid_x;
 	uint16_t mid_y;
 	uint16_t divisor;
 	uint16_t deadzone;
+	uint8_t invert_x;
 	uint8_t invert_y;
-	uint8_t valid;
+	uint16_t checksum;
 };
 
-static struct stick_calib_store stick_store;
-
-static int stick_settings_set(const char *name, size_t len, settings_read_cb read_cb, void *cb_arg) {
-	const char *next;
-	ssize_t rc;
-
-	if (settings_name_steq(name, "calib", &next) && !next) {
-		if (len != sizeof(stick_store)) {
-			return -EINVAL;
-		}
-		rc = read_cb(cb_arg, &stick_store, len);
-		return rc >= 0 ? 0 : rc;
+static uint16_t stick_calib_checksum(const struct stick_calib_blob *b) {
+	const uint8_t *p = (const uint8_t *)b;
+	uint16_t sum = 0;
+	/* checksum field itself excluded */
+	for (size_t i = 0; i < offsetof(struct stick_calib_blob, checksum); i++) {
+		sum = (uint16_t)(sum + p[i]);
 	}
-	return -ENOENT;
+	return sum;
 }
 
-SETTINGS_STATIC_HANDLER_DEFINE(psp_stick, "psp_stick", NULL, stick_settings_set, NULL, NULL);
-
-static void stick_apply_store(struct analog_input_data *data) {
-	if (!stick_store.valid || data->rt_ch_len < 2) {
+static void stick_apply_blob(struct analog_input_data *data, const struct stick_calib_blob *b) {
+	if (data->rt_ch_len < 2) {
 		return;
 	}
-	data->rt_ch[0].mv_mid = stick_store.mid_x;
-	data->rt_ch[1].mv_mid = stick_store.mid_y;
-	data->rt_ch[0].mv_deadzone = stick_store.deadzone;
-	data->rt_ch[1].mv_deadzone = stick_store.deadzone;
-	data->rt_ch[0].scale_divisor = stick_store.divisor ? stick_store.divisor : 1;
-	data->rt_ch[1].scale_divisor = stick_store.divisor ? stick_store.divisor : 1;
-	data->rt_ch[1].invert = stick_store.invert_y != 0;
+	data->rt_ch[0].mv_mid = b->mid_x;
+	data->rt_ch[1].mv_mid = b->mid_y;
+	data->rt_ch[0].mv_deadzone = b->deadzone;
+	data->rt_ch[1].mv_deadzone = b->deadzone;
+	data->rt_ch[0].scale_divisor = b->divisor ? b->divisor : 1;
+	data->rt_ch[1].scale_divisor = b->divisor ? b->divisor : 1;
+	data->rt_ch[0].invert = b->invert_x != 0;
+	data->rt_ch[1].invert = b->invert_y != 0;
 }
 
-static int stick_save_store(struct analog_input_data *data) {
-	/* Copy to stack so key/value are in RAM while flash XIP is off */
-	struct stick_calib_store tmp;
+static int stick_flash_load(struct analog_input_data *data) {
+	const struct flash_area *fa;
+	struct stick_calib_blob blob;
+	int rc;
 
-	tmp.mid_x = data->rt_ch[0].mv_mid;
-	tmp.mid_y = data->rt_ch[1].mv_mid;
-	tmp.deadzone = data->rt_ch[0].mv_deadzone;
-	tmp.divisor = data->rt_ch[0].scale_divisor;
-	tmp.invert_y = data->rt_ch[1].invert ? 1 : 0;
-	tmp.valid = 1;
-	stick_store = tmp;
-	return settings_save_one("psp_stick/calib", &tmp, sizeof(tmp));
+	rc = flash_area_open(FIXED_PARTITION_ID(storage_partition), &fa);
+	if (rc) {
+		return rc;
+	}
+	rc = flash_area_read(fa, 0, &blob, sizeof(blob));
+	flash_area_close(fa);
+	if (rc) {
+		return rc;
+	}
+	if (blob.magic != STICK_CALIB_MAGIC || blob.checksum != stick_calib_checksum(&blob)) {
+		return -ENOENT;
+	}
+	stick_apply_blob(data, &blob);
+	LOG_INF("Loaded stick calib from flash");
+	return 0;
 }
-#endif /* CONFIG_SETTINGS */
+
+static int stick_flash_save(struct analog_input_data *data) {
+	const struct flash_area *fa;
+	struct stick_calib_blob blob;
+	int rc;
+
+	if (data->rt_ch_len < 2) {
+		return -EINVAL;
+	}
+
+	memset(&blob, 0, sizeof(blob));
+	blob.magic = STICK_CALIB_MAGIC;
+	blob.mid_x = data->rt_ch[0].mv_mid;
+	blob.mid_y = data->rt_ch[1].mv_mid;
+	blob.deadzone = data->rt_ch[0].mv_deadzone;
+	blob.divisor = data->rt_ch[0].scale_divisor;
+	blob.invert_x = data->rt_ch[0].invert ? 1 : 0;
+	blob.invert_y = data->rt_ch[1].invert ? 1 : 0;
+	blob.checksum = stick_calib_checksum(&blob);
+
+	rc = flash_area_open(FIXED_PARTITION_ID(storage_partition), &fa);
+	if (rc) {
+		return rc;
+	}
+	rc = flash_area_erase(fa, 0, STICK_CALIB_ERASE);
+	if (rc) {
+		flash_area_close(fa);
+		return rc;
+	}
+	rc = flash_area_write(fa, 0, &blob, sizeof(blob));
+	flash_area_close(fa);
+	return rc;
+}
+#endif /* storage_partition */
 
 static int analog_input_report_data(const struct device *dev) {
     struct analog_input_data *data = dev->data;
@@ -329,9 +371,8 @@ static void analog_input_async_init(struct k_work *work) {
         data->rt_ch[i] = config->io_channels[i];
     }
 
-#if IS_ENABLED(CONFIG_SETTINGS)
-    settings_load_subtree("psp_stick");
-    stick_apply_store(data);
+#if FIXED_PARTITION_EXISTS(storage_partition)
+    (void)stick_flash_load(data);
 #endif
 
     for (uint8_t i = 0; i < data->rt_ch_len; i++) {
@@ -686,12 +727,18 @@ static int cmd_stick_save(const struct shell *shell, size_t argc, char **argv) {
 		shell_error(shell, "STICK ERR not ready");
 		return -EBUSY;
 	}
-	/*
-	 * Do not call settings_save_one() on RP2040 — known hang in flash/XIP.
-	 * Host tuner persists calibration and re-applies on connect.
-	 */
-	shell_print(shell, "STICK OK saved host=1");
+#if FIXED_PARTITION_EXISTS(storage_partition)
+	int err = stick_flash_save(data);
+	if (err) {
+		shell_error(shell, "STICK ERR save failed %d", err);
+		return err;
+	}
+	shell_print(shell, "STICK OK saved");
 	return 0;
+#else
+	shell_error(shell, "STICK ERR no storage partition");
+	return -ENOTSUP;
+#endif
 }
 
 SHELL_STATIC_SUBCMD_SET_CREATE(stick_cmds,
