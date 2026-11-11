@@ -54,7 +54,9 @@ Use o **[PSP Stick Tuner](https://github.com/GsMoura033/psp-stick-tuner)** ([dow
 2. USB → **Detectar** no tuner (escolhe a COM que responde)
 3. Centro / zona morta / velocidade / **inverter X e Y** → **Salvar**
 
-**Salvar** no tuner grava a calibração na **flash da placa** (blob em `storage_partition`, sem NVS). Depois o stick funciona em qualquer PC — inclusive Windows XP como mouse USB. O app de calibração em si precisa de Windows 10/11.
+**Salvar** no tuner grava a calibração na **flash da placa** (não no PC). Depois o stick funciona em qualquer máquina como mouse USB — Windows 10/11, XP, Linux, etc.
+
+O `PSP-Stick-Tuner.exe` é só **Windows 10/11** (não roda no XP nem nativamente no Linux). No Linux dá para calibrar com `python app.py`, ou calibrar no Windows e só usar o stick.
 
 Protocolo shell (115200): `stick get|live|mid|deadzone|divisor|invert_x|invert_y|save`
 
