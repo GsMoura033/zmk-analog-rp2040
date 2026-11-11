@@ -56,6 +56,8 @@ struct analog_input_data {
 	/* Runtime-tunable copy of DT channel config (for stick tuner app) */
 	uint8_t rt_ch_len;
 	struct analog_input_io_channel rt_ch[ANALOG_INPUT_MAX_CHANNELS];
+	int32_t last_raw[ANALOG_INPUT_MAX_CHANNELS];
+	int32_t last_mv[ANALOG_INPUT_MAX_CHANNELS];
 };
 
 struct analog_input_config {

@@ -187,9 +187,8 @@ static int analog_input_report_data(const struct device *dev) {
         int32_t raw = data->as_buff[i];
         int32_t mv = raw;
         adc_raw_to_millivolts(adc_ref_internal(adc), ADC_GAIN_1_6, as->resolution, &mv);
-#if IS_ENABLED(CONFIG_ANALOG_INPUT_LOG_DBG_RAW)
-        LOG_DBG("AIN%u raw: %d mv: %d", ch_cfg.adc_channel.channel_id, raw, mv);
-#endif
+        data->last_raw[i] = raw;
+        data->last_mv[i] = mv;
 
         int16_t v = mv - ch_cfg.mv_mid;
         int16_t dz = ch_cfg.mv_deadzone;
@@ -224,6 +223,19 @@ static int analog_input_report_data(const struct device *dev) {
 
     // First read is setup as calibration
     as->calibrate = false;
+
+#if IS_ENABLED(CONFIG_ANALOG_INPUT_LOG_DBG_RAW)
+    /* ~10 Hz max — full-rate DBG floods USB CDC and shell commands time out */
+    static int64_t last_raw_log;
+    int64_t raw_now = k_uptime_get();
+    if (raw_now - last_raw_log >= 100) {
+        last_raw_log = raw_now;
+        for (uint8_t i = 0; i < data->rt_ch_len; i++) {
+            LOG_INF("AIN%u raw: %d mv: %d", data->rt_ch[i].adc_channel.channel_id,
+                    data->last_raw[i], data->last_mv[i]);
+        }
+    }
+#endif
 
 #if CONFIG_ANALOG_INPUT_REPORT_INTERVAL_MIN > 0
     // purge accumulated delta, if last sampled had not been reported on last report tick
