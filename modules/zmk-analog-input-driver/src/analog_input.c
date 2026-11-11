@@ -568,10 +568,11 @@ static int cmd_stick_get(const struct shell *shell, size_t argc, char **argv) {
 		return -EBUSY;
 	}
 	shell_print(shell,
-		    "STICK OK mid_x=%u mid_y=%u deadzone=%u divisor=%u invert_y=%d live_x=%d live_y=%d",
+		    "STICK OK mid_x=%u mid_y=%u deadzone=%u divisor=%u invert_x=%d invert_y=%d "
+		    "live_x=%d live_y=%d",
 		    data->rt_ch[0].mv_mid, data->rt_ch[1].mv_mid, data->rt_ch[0].mv_deadzone,
-		    data->rt_ch[0].scale_divisor, data->rt_ch[1].invert ? 1 : 0, data->last_mv[0],
-		    data->last_mv[1]);
+		    data->rt_ch[0].scale_divisor, data->rt_ch[0].invert ? 1 : 0,
+		    data->rt_ch[1].invert ? 1 : 0, data->last_mv[0], data->last_mv[1]);
 	return 0;
 }
 
@@ -643,6 +644,21 @@ static int cmd_stick_divisor(const struct shell *shell, size_t argc, char **argv
 	return 0;
 }
 
+static int cmd_stick_invert_x(const struct shell *shell, size_t argc, char **argv) {
+	if (argc != 2 || !stick_dev) {
+		shell_error(shell, "STICK ERR usage: stick invert_x <0|1>");
+		return -EINVAL;
+	}
+	struct analog_input_data *data = stick_dev->data;
+	if (!data->ready || data->rt_ch_len < 1) {
+		shell_error(shell, "STICK ERR not ready");
+		return -EBUSY;
+	}
+	data->rt_ch[0].invert = strtoul(argv[1], NULL, 10) != 0;
+	shell_print(shell, "STICK OK invert_x=%d", data->rt_ch[0].invert ? 1 : 0);
+	return 0;
+}
+
 static int cmd_stick_invert_y(const struct shell *shell, size_t argc, char **argv) {
 	if (argc != 2 || !stick_dev) {
 		shell_error(shell, "STICK ERR usage: stick invert_y <0|1>");
@@ -684,8 +700,9 @@ SHELL_STATIC_SUBCMD_SET_CREATE(stick_cmds,
 	SHELL_CMD_ARG(mid, NULL, "Set mid_x mid_y", cmd_stick_mid, 3, 0),
 	SHELL_CMD_ARG(deadzone, NULL, "Set deadzone", cmd_stick_deadzone, 2, 0),
 	SHELL_CMD_ARG(divisor, NULL, "Set speed divisor (higher=slower)", cmd_stick_divisor, 2, 0),
+	SHELL_CMD_ARG(invert_x, NULL, "Invert X axis 0/1", cmd_stick_invert_x, 2, 0),
 	SHELL_CMD_ARG(invert_y, NULL, "Invert Y axis 0/1", cmd_stick_invert_y, 2, 0),
-	SHELL_CMD(save, NULL, "Save calibration to flash", cmd_stick_save),
+	SHELL_CMD(save, NULL, "ACK save (host persists calibration)", cmd_stick_save),
 	SHELL_SUBCMD_SET_END);
 
 SHELL_CMD_REGISTER(stick, &stick_cmds, "PSP stick calibration", NULL);
