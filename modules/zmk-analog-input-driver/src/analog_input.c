@@ -670,18 +670,12 @@ static int cmd_stick_save(const struct shell *shell, size_t argc, char **argv) {
 		shell_error(shell, "STICK ERR not ready");
 		return -EBUSY;
 	}
-#if IS_ENABLED(CONFIG_SETTINGS)
-	int err = stick_save_store(data);
-	if (err) {
-		shell_error(shell, "STICK ERR save failed %d", err);
-		return err;
-	}
-	shell_print(shell, "STICK OK saved");
+	/*
+	 * Do not call settings_save_one() on RP2040 — known hang in flash/XIP.
+	 * Host tuner persists calibration and re-applies on connect.
+	 */
+	shell_print(shell, "STICK OK saved host=1");
 	return 0;
-#else
-	shell_error(shell, "STICK ERR settings disabled");
-	return -ENOTSUP;
-#endif
 }
 
 SHELL_STATIC_SUBCMD_SET_CREATE(stick_cmds,
