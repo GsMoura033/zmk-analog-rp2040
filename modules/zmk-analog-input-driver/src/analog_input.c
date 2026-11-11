@@ -34,10 +34,9 @@ struct stick_calib_store {
 	uint16_t mid_x;
 	uint16_t mid_y;
 	uint16_t divisor;
-	uint8_t deadzone;
+	uint16_t deadzone;
 	uint8_t invert_y;
 	uint8_t valid;
-	uint8_t _pad[2];
 };
 
 static struct stick_calib_store stick_store;
@@ -81,8 +80,6 @@ static int stick_save_store(struct analog_input_data *data) {
 	tmp.divisor = data->rt_ch[0].scale_divisor;
 	tmp.invert_y = data->rt_ch[1].invert ? 1 : 0;
 	tmp.valid = 1;
-	tmp._pad[0] = 0;
-	tmp._pad[1] = 0;
 	stick_store = tmp;
 	return settings_save_one("psp_stick/calib", &tmp, sizeof(tmp));
 }
@@ -571,9 +568,10 @@ static int cmd_stick_get(const struct shell *shell, size_t argc, char **argv) {
 		return -EBUSY;
 	}
 	shell_print(shell,
-		    "STICK OK mid_x=%u mid_y=%u deadzone=%u divisor=%u invert_y=%d",
+		    "STICK OK mid_x=%u mid_y=%u deadzone=%u divisor=%u invert_y=%d live_x=%d live_y=%d",
 		    data->rt_ch[0].mv_mid, data->rt_ch[1].mv_mid, data->rt_ch[0].mv_deadzone,
-		    data->rt_ch[0].scale_divisor, data->rt_ch[1].invert ? 1 : 0);
+		    data->rt_ch[0].scale_divisor, data->rt_ch[1].invert ? 1 : 0, data->last_mv[0],
+		    data->last_mv[1]);
 	return 0;
 }
 
@@ -619,7 +617,7 @@ static int cmd_stick_deadzone(const struct shell *shell, size_t argc, char **arg
 		shell_error(shell, "STICK ERR not ready");
 		return -EBUSY;
 	}
-	uint8_t dz = (uint8_t)CLAMP(strtoul(argv[1], NULL, 10), 0, 255);
+	uint16_t dz = (uint16_t)CLAMP(strtoul(argv[1], NULL, 10), 0, 2000);
 	for (uint8_t i = 0; i < data->rt_ch_len; i++) {
 		data->rt_ch[i].mv_deadzone = dz;
 	}

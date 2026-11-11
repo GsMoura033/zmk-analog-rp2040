@@ -22,7 +22,7 @@ struct analog_input_io_channel {
 	struct adc_dt_spec adc_channel;
 	uint16_t mv_mid;
 	uint16_t mv_min_max;
-	uint8_t mv_deadzone;
+	uint16_t mv_deadzone;
 	bool invert;
 	bool report_on_change_only;
 	uint16_t scale_multiplier;

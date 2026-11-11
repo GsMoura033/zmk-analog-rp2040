@@ -1,0 +1,13 @@
+/* NVS settings partition for stick save on SparkFun Pro Micro RP2040. */
+&code_partition {
+	reg = <0x100 (DT_SIZE_M(2) - 0x100 - DT_SIZE_K(64))>;
+};
+
+&flash0 {
+	reg = <0x10000000 DT_SIZE_M(2)>;
+	partitions {
+		storage_partition: partition@1f0000 {
+			reg = <0x1f0000 DT_SIZE_K(64)>;
+		};
+	};
+};
