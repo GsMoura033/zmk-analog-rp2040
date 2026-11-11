@@ -29,6 +29,7 @@ LOG_MODULE_REGISTER(ANALOG_INPUT, CONFIG_ANALOG_INPUT_LOG_LEVEL);
 static const struct device *stick_dev;
 
 #if IS_ENABLED(CONFIG_SETTINGS)
+/* Single blob — fewer flash writes (RP2040 NVS is sensitive). */
 struct stick_calib_store {
 	uint16_t mid_x;
 	uint16_t mid_y;
@@ -36,6 +37,7 @@ struct stick_calib_store {
 	uint8_t deadzone;
 	uint8_t invert_y;
 	uint8_t valid;
+	uint8_t _pad[2];
 };
 
 static struct stick_calib_store stick_store;
@@ -44,46 +46,11 @@ static int stick_settings_set(const char *name, size_t len, settings_read_cb rea
 	const char *next;
 	ssize_t rc;
 
-	if (settings_name_steq(name, "mid_x", &next) && !next) {
-		if (len != sizeof(stick_store.mid_x)) {
+	if (settings_name_steq(name, "calib", &next) && !next) {
+		if (len != sizeof(stick_store)) {
 			return -EINVAL;
 		}
-		rc = read_cb(cb_arg, &stick_store.mid_x, len);
-		return rc >= 0 ? 0 : rc;
-	}
-	if (settings_name_steq(name, "mid_y", &next) && !next) {
-		if (len != sizeof(stick_store.mid_y)) {
-			return -EINVAL;
-		}
-		rc = read_cb(cb_arg, &stick_store.mid_y, len);
-		return rc >= 0 ? 0 : rc;
-	}
-	if (settings_name_steq(name, "divisor", &next) && !next) {
-		if (len != sizeof(stick_store.divisor)) {
-			return -EINVAL;
-		}
-		rc = read_cb(cb_arg, &stick_store.divisor, len);
-		return rc >= 0 ? 0 : rc;
-	}
-	if (settings_name_steq(name, "deadzone", &next) && !next) {
-		if (len != sizeof(stick_store.deadzone)) {
-			return -EINVAL;
-		}
-		rc = read_cb(cb_arg, &stick_store.deadzone, len);
-		return rc >= 0 ? 0 : rc;
-	}
-	if (settings_name_steq(name, "invert_y", &next) && !next) {
-		if (len != sizeof(stick_store.invert_y)) {
-			return -EINVAL;
-		}
-		rc = read_cb(cb_arg, &stick_store.invert_y, len);
-		return rc >= 0 ? 0 : rc;
-	}
-	if (settings_name_steq(name, "valid", &next) && !next) {
-		if (len != sizeof(stick_store.valid)) {
-			return -EINVAL;
-		}
-		rc = read_cb(cb_arg, &stick_store.valid, len);
+		rc = read_cb(cb_arg, &stick_store, len);
 		return rc >= 0 ? 0 : rc;
 	}
 	return -ENOENT;
@@ -105,36 +72,19 @@ static void stick_apply_store(struct analog_input_data *data) {
 }
 
 static int stick_save_store(struct analog_input_data *data) {
-	int err;
+	/* Copy to stack so key/value are in RAM while flash XIP is off */
+	struct stick_calib_store tmp;
 
-	stick_store.mid_x = data->rt_ch[0].mv_mid;
-	stick_store.mid_y = data->rt_ch[1].mv_mid;
-	stick_store.deadzone = data->rt_ch[0].mv_deadzone;
-	stick_store.divisor = data->rt_ch[0].scale_divisor;
-	stick_store.invert_y = data->rt_ch[1].invert ? 1 : 0;
-	stick_store.valid = 1;
-
-	err = settings_save_one("psp_stick/mid_x", &stick_store.mid_x, sizeof(stick_store.mid_x));
-	if (err) {
-		return err;
-	}
-	err = settings_save_one("psp_stick/mid_y", &stick_store.mid_y, sizeof(stick_store.mid_y));
-	if (err) {
-		return err;
-	}
-	err = settings_save_one("psp_stick/deadzone", &stick_store.deadzone, sizeof(stick_store.deadzone));
-	if (err) {
-		return err;
-	}
-	err = settings_save_one("psp_stick/divisor", &stick_store.divisor, sizeof(stick_store.divisor));
-	if (err) {
-		return err;
-	}
-	err = settings_save_one("psp_stick/invert_y", &stick_store.invert_y, sizeof(stick_store.invert_y));
-	if (err) {
-		return err;
-	}
-	return settings_save_one("psp_stick/valid", &stick_store.valid, sizeof(stick_store.valid));
+	tmp.mid_x = data->rt_ch[0].mv_mid;
+	tmp.mid_y = data->rt_ch[1].mv_mid;
+	tmp.deadzone = data->rt_ch[0].mv_deadzone;
+	tmp.divisor = data->rt_ch[0].scale_divisor;
+	tmp.invert_y = data->rt_ch[1].invert ? 1 : 0;
+	tmp.valid = 1;
+	tmp._pad[0] = 0;
+	tmp._pad[1] = 0;
+	stick_store = tmp;
+	return settings_save_one("psp_stick/calib", &tmp, sizeof(tmp));
 }
 #endif /* CONFIG_SETTINGS */
 
@@ -627,6 +577,22 @@ static int cmd_stick_get(const struct shell *shell, size_t argc, char **argv) {
 	return 0;
 }
 
+static int cmd_stick_live(const struct shell *shell, size_t argc, char **argv) {
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+	if (!stick_dev) {
+		shell_error(shell, "STICK ERR no device");
+		return -ENODEV;
+	}
+	struct analog_input_data *data = stick_dev->data;
+	if (!data->ready || data->rt_ch_len < 2) {
+		shell_error(shell, "STICK ERR not ready");
+		return -EBUSY;
+	}
+	shell_print(shell, "STICK OK live_x=%d live_y=%d", data->last_mv[0], data->last_mv[1]);
+	return 0;
+}
+
 static int cmd_stick_mid(const struct shell *shell, size_t argc, char **argv) {
 	if (argc != 3 || !stick_dev) {
 		shell_error(shell, "STICK ERR usage: stick mid <x> <y>");
@@ -722,6 +688,7 @@ static int cmd_stick_save(const struct shell *shell, size_t argc, char **argv) {
 
 SHELL_STATIC_SUBCMD_SET_CREATE(stick_cmds,
 	SHELL_CMD(get, NULL, "Show calibration", cmd_stick_get),
+	SHELL_CMD(live, NULL, "Show live ADC mV", cmd_stick_live),
 	SHELL_CMD_ARG(mid, NULL, "Set mid_x mid_y", cmd_stick_mid, 3, 0),
 	SHELL_CMD_ARG(deadzone, NULL, "Set deadzone", cmd_stick_deadzone, 2, 0),
 	SHELL_CMD_ARG(divisor, NULL, "Set speed divisor (higher=slower)", cmd_stick_divisor, 2, 0),
